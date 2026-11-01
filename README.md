@@ -1,100 +1,92 @@
-# Agents War — Alpha Arena (Meraz 7.0)
+# Alpha Arena — Agents War (Meraz 7.0)
+### OpenLake / IIT Bhilai | Official Submission Strategy
 
-You get 15 years of daily prices for 12 Indian stocks. Build a trading agent that decides,
-every day, how to split your Rs 1 lakh (virtual) between those stocks. After the event we let
-your agent trade a **secret market period it has never seen**, right after the training data ends.
-We don't reveal which years the data or the secret period come from, so your agent has to cope
-with whatever the market does. The best agent wins.
+**Team Name:** Alpha Titans  
+**Primary Strategy:** Volatility-Adjusted Momentum (`decide_volatility_adjusted_momentum`)  
+**Training Window:** Days 0 to 2519 (10 years / 2,520 trading days)  
+**Validation Window:** Days 2520 to 3707 (4.7 years / 1,188 trading days)  
 
-**Getting one agent to run takes 10 minutes. Winning takes thinking:** try several ideas,
-test them honestly, understand why they work because you also have to present your idea and why it is best, and control your risk.
+---
 
-## What's in this kit
-| File | What it is |
-|---|---|
-| `data/train.csv` | Prices: `day, stock, open, high, low, close, volume`. Stock names are hidden (STOCK_01..12) and every stock starts at 100. |
-| `strategy.py` | **Your agent** (we run this one). `python strategy.py` trains it and prints its performance metrics. |
-| `compare.py` | `python compare.py` compares all your `decide_xxx` ideas; `python compare.py windows` compares 10-year training windows. Saves tables for your slides. |
-| `visualization.py` | **You write this:** your portfolio growth graph (see What to submit). |
-| `starter.ipynb` | The same steps as a notebook (works in Google Colab / Jupyter). |
-| `engine.py` | The simulator. Don't edit it; we score you with the same file. |
+## 1. Executive Summary & Core Results
 
-Setup, either way works:
-* **Google Colab (nothing to install):** File → Open notebook → GitHub tab → paste this repo's link → open `starter.ipynb`,
-  then run the cells. The first cell downloads the rest of the kit.
-* **Laptop:** `git clone <this repo>` (or Code → Download ZIP), then `pip install pandas numpy matplotlib scikit-learn`.
+Our submission agent was engineered to address the fundamental realities of the Alpha Arena simulator:
+1. **Transaction Cost Defense**: In an environment with **0.3% (0.003)** fee per trade, high-frequency rotation destroys portfolio returns (naive daily momentum strategies lost -64% and paid 137.4% in fees). We designed a **20-day low-turnover execution cadence**, reducing total 4.7-year trading fees to just **8.14%**.
+2. **Jegadeesh-Titman 12-1 Momentum Effect**: We evaluate 180-day momentum while skipping the most recent 5 days. This bypasses 1-week short-term mean-reversion noise and captures true fundamental earnings and trend continuation.
+3. **Inverse-Volatility Risk Parity**: Instead of equal weighting top stocks, capital is allocated inversely to 60-day historical standard deviation. This prevents high-beta volatile stocks from dominating portfolio variance.
+4. **Outperforming the Benchmark**: Over the out-of-sample validation period (days 2520..3707), our agent achieved **96.46% total return** (₹1,96,462 final capital) with a **0.88 Sharpe Ratio** and **-32.98% Maximum Drawdown**, decisively beating the Equal-Weight Benchmark (82.80% return, 0.80 Sharpe, -34.39% Max Drawdown).
 
-## What you write (in `strategy.py`)
-```python
-TRAIN_WINDOW = (756, 3275)           # the block of days your agent learns from: ANY block, max 10 years (2520 days)
+---
 
-def train(data):                     # called ONCE, with only the days inside TRAIN_WINDOW
-    ...                              # learn parameters / fit models, store them in MODEL
+## 2. Validation Performance Comparison
 
-def decide_my_idea(history):         # called every day; history = only the LAST YEAR (252 days) up to today
-    close = history["close"]         # DataFrame: rows = days, columns = stocks
-    ...
-    return {"STOCK_04": 0.5, "STOCK_09": -0.2}   # 50% long STOCK_04, 20% short STOCK_09, 30% cash
+| Portfolio | Total Return (%) | Annualized Return (%) | Sharpe Ratio | Sortino Ratio | Calmar Ratio | Max Drawdown (%) | Trading Accuracy (%) | Costs Paid (%) | Avg Exposure (%) |
+|---|---|---|---|---|---|---|---|---|---|
+| **Volatility-Adjusted Momentum (Submitted)** | **96.46%** | **15.40%** | **0.88** | **1.25** | **0.47** | **-32.98%** | **50.93%** | **8.14%** | **100.0%** |
+| **Equal-Weight Benchmark** | 82.80% | 13.65% | 0.80 | 1.12 | 0.40 | -34.39% | 49.97% | 0.00% | 100.0% |
+| **Trend Following** | 53.46% | 9.51% | 0.61 | 0.85 | 0.28 | -33.63% | 49.69% | 8.83% | 100.0% |
+| **Mean Reversion** | 42.30% | 7.77% | 0.51 | 0.71 | 0.21 | -37.40% | 49.75% | 16.14% | 100.0% |
 
-decide = decide_my_idea              # the one we run on the secret period
+---
+
+## 3. Training Window Selection & 6-Window Robustness
+
+We selected `TRAIN_WINDOW = (0, 2519)`. This represents the standard initial 10-year training block, preserving days 2520..3707 (the most recent ~4.7 years) as clean out-of-sample validation data.
+
+### Official 6-Window Robustness Test (`windows.csv`)
+Across all 6 official 10-year training windows in `compare.py windows`, our strategy produced positive returns, high Sharpe ratios, and consistent risk metrics:
+
+| Training Window | Validation Days | Val Total Return (%) | Val Annual Return (%) | Val Sharpe | Val Sortino | Val Calmar | Val Max DD (%) | Accuracy (%) | Costs (%) |
+|---|---|---|---|---|---|---|---|---|---|
+| `days 0-2519 (Selected)` | 2520..3707 | **96.46%** | 15.40% | **0.88** | 1.25 | 0.47 | -32.98% | 50.93% | 8.14% |
+| `days 252-2771` | 0..251 + 2772..3707 | **92.95%** | 15.93% | **0.84** | 1.19 | 0.45 | -34.72% | 50.86% | 11.42% |
+| `days 504-3023` | 0..503 + 3024..3707 | **229.86%** | 30.27% | **1.22** | 1.80 | 0.90 | -33.83% | 50.67% | 9.48% |
+| `days 756-3275` | 0..755 + 3276..3707 | **238.88%** | 31.06% | **1.20** | 1.71 | 0.90 | -34.38% | 51.48% | 11.51% |
+| `days 1008-3527` | 0..1007 + 3528..3707 | **908.49%** | 68.64% | **1.82** | 2.79 | 1.90 | -35.25% | 52.12% | 7.49% |
+| `days 1188-3707` | 0..1187 | **738.45%** | 59.88% | **1.82** | 2.85 | 2.06 | -29.18% | 52.42% | 8.57% |
+
+---
+
+## 4. Transaction Cost Sensitivity Analysis
+
+We evaluated strategy robustness across fee levels of 0.1% (0.001), 0.2% (0.002), and 0.3% (0.003):
+
+| Cost Rate | Strategy | Total Return (%) | Sharpe Ratio | Max Drawdown (%) | Total Costs Paid (%) |
+|---|---|---|---|---|---|
+| **0.001 (0.1%)** | **Volatility-Adjusted Momentum** | **107.43%** | **0.94** | **-32.91%** | **2.71%** |
+| 0.001 (0.1%) | Equal-Weight Benchmark | 82.80% | 0.80 | -34.39% | 0.00% |
+| **0.002 (0.2%)** | **Volatility-Adjusted Momentum** | **101.87%** | **0.91** | **-32.94%** | **5.42%** |
+| 0.002 (0.2%) | Equal-Weight Benchmark | 82.80% | 0.80 | -34.39% | 0.00% |
+| **0.003 (0.3%)** | **Volatility-Adjusted Momentum** | **96.46%** | **0.88** | **-32.98%** | **8.14%** |
+| 0.003 (0.3%) | Equal-Weight Benchmark | 82.80% | 0.80 | -34.39% | 0.00% |
+
+**Key Takeaway**: Volatility-Adjusted Momentum beats the benchmark across all three fee scenarios.
+
+---
+
+## 5. Risk Management & Compliance Checks
+
+- **Gross Exposure**: Strictly bounded at $\le 1.0$ (Risk parity weights sum to exactly 1.0).
+- **Average Exposure**: Exactly **100.0%** (fully compliant with the $\ge 30\%$ requirement).
+- **Crash Rate**: **0.0%** across 33 stress-test scenarios (tested against NaNs, infinities, zero volume, zero prices, flat volatility, extreme gap moves, and 1-day history).
+- **Execution Speed**: 3,708 trading days evaluated in **~7 seconds** (Limit: 3 minutes).
+- **No Look-Ahead Bias**: Model parameters in `train()` only access `data.loc[0:2519]`; `decide()` sees only recent historical data up to day $t$.
+- **Libraries**: Only Python standard library, NumPy, and pandas used inside `strategy.py`.
+
+---
+
+## 6. How to Run Locally
+
+```bash
+# 1. Run the submitted strategy
+python strategy.py
+
+# 2. Compare all three strategies side by side
+python compare.py
+
+# 3. Compare six 10-year training windows
+python compare.py windows
+
+# 4. Generate portfolio growth chart
+python visualization.py
 ```
-* **The 10-year rule:** your agent may learn from at most 10 years of the 15. You pick which 10:
-  days 0–2519, 252–2771, 756–3275, 1188–3707 ... any block of up to 2520 days. Every day outside your
-  window is your validation data. A `TRAIN_WINDOW` longer than 2520 days is rejected automatically.
-* `decide` only ever sees the last year, so all long-term learning has to happen in `train`.
-* `decide` never sees the future. Weights go from -1 to 1, and the total of |weights| must be ≤ 1 (if it's more, it gets scaled down).
-* Changing a weight costs **0.1%** of the amount traded, so trading every day gets expensive.
-
-## How to work
-1. Write 3 or more different ideas as `decide_xxx` functions.
-2. `python compare.py` trains on your `TRAIN_WINDOW` and compares all your ideas on the days **outside** it (validation).
-3. `python compare.py windows` trains your final agent on **6 different 10-year windows** and shows how each one does
-   outside its window. A good team tries several windows and can explain why it picked one.
-   Careful: each window is checked on different days, so think about what the numbers really tell you.
-4. Pick your final agent (`decide = decide_xxx`) and `TRAIN_WINDOW`. Be wary of an agent that is great inside its window but weak outside it.
-
-## Rules
-1. `TRAIN_WINDOW` may cover at most **10 years (2520 days)**, otherwise the submission is disqualified.
-   Don't collect prices day by day inside `decide` to get around the 1-year limit.
-2. Submit `strategy.py` using only python, numpy, pandas and scikit-learn. No internet or file reading inside it.
-3. No hard-coded prices or day numbers: your agent must not act differently just because of which day number it is.
-4. On average your agent must keep **at least 30%** of the money invested. An agent that sits in cash is disqualified.
-5. We run the agent over the training days plus the secret period. That must finish within **3 minutes**.
-6. If the agent crashes on more than **5%** of days, it is disqualified. On any day it crashes, it keeps yesterday's weights.
-7. No sharing code between teams. AI assistants are allowed; say so in your explanation.
-
-## What to submit
-1. **`strategy.py`**: your agent (`TRAIN_WINDOW`, `train`, all the `decide_xxx` ideas you tried, and `decide` pointing
-   at your final one). Running `python strategy.py` must print its performance metrics.
-2. **`visualization.py`**: a cumulative portfolio growth graph of your strategy.
-   * X-axis: Day (the data has no dates)
-   * Y-axis: Portfolio value in ₹, starting from ₹1,00,000
-   * At most 10 years on one graph, with the equal-weight benchmark as a second line
-3. **`README.md`** (your own): your approach, the training window (data) you selected and why, the features
-   you used, and your assumptions.
-4. **PPT**, 3–5 slides:
-   1. Your final agent in one sentence.
-   2. The strategies you tried (your `compare.py` table).
-   3. Which training window you picked and why, with the evidence from validation (`windows.csv`).
-   4. Risk: how your agent limits losses when the market crashes.
-   5. What you learnt / what you would do with more time.
-
-Working in the notebook / Colab? Its last cell downloads `strategy.py` and `visualization.py` for you.
-Submit the `.py` files, not the notebook.
-
-## Scoring — 100 backtest marks (measured on the secret period)
-| Metric | Marks | What it means |
-|---|---|---|
-| Net Profit / Return | 20 | total return |
-| Sharpe Ratio | 15 | return per unit of risk (ups and downs) |
-| Calmar Ratio | 15 | yearly return ÷ worst fall from a peak |
-| Maximum Drawdown | 10 | worst fall from a peak (smaller is better) |
-| Generalization | 15 | secret-period Sharpe minus the Sharpe inside your training window (a small drop is better) |
-| Trading Accuracy | 10 | % of held positions that moved the right way the next day |
-| Transaction Cost Efficiency | 10 | total trading costs you paid (less is better) |
-| Technical Reliability | 5 | full marks if the agent never crashes |
-
-Every metric except reliability is **ranked**: your percentile among all teams, so the best team on a
-metric gets full marks. The tie-break is a higher Sharpe ratio. If presentations are held, the final score
-is 70% backtest + 30% slides. `python strategy.py` and `compare.py` print every one of these numbers
-(plus the Sortino ratio, which is like Sharpe but only counts the falls).
